@@ -16,3 +16,73 @@ Filebeat 负责将日志发送给 Logstash Server 端(使用 lumberjack 网络�
 
 
 ![elk stack](/images/elk_stack.png/)
+
+
+####安装步骤：
+
+总体分为3个部分:
+1. 部署 logstash server 和 kibana server, 新开一个主机部署这两个服务
+  * 安装 JAVA8 (Elasticsearch 和 Logstash 需要 Java，所以我们需要安装。)
+```
+    sudo add-apt-repository -y ppa:webupd8team/java (添加 Oracle JavaPPA 到 apt)
+    sudo apt-get update
+    sudo apt-get -y install oracle-java8-installer
+```
+  * 安装 kibana 和 logstash
+```
+    echo "deb http://packages.elastic.co/kibana/4.4/debian stable main" | sudo tee -a /etc/apt/sources.list.d/kibana-4.4.x.list
+    echo 'deb http://packages.elastic.co/logstash/2.2/debian stable main' | sudo tee /etc/apt/sources.list.d/logstash-2.2.x.list
+    sudo apt-get update
+    sudo apt-get install kibana logstash
+    sudo service kibana start   # 相关配置文件位于 /opt/kibana/config/kibana.yml
+    sudo service logstash start # 相关配置文件位于 /etc/logstash/conf.d/logstash.conf
+```
+2. 部署 Elasticsearch 服务
+  * 目前使用的是青云的 Elasticsearch 服务
+3. 在 Web server 上安装并配置 Filebeat，使其能将日志发送给 Logstash Server
+  * 安装 filebeat
+```
+    curl -L -O https://download.elastic.co/beats/filebeat/filebeat_1.3.1_amd64.deb
+    sudo dpkg -i filebeat_1.3.1_amd64.deb
+    vi /etc/filebeat/filebeat.yml
+    sudo service filebeat start
+```
+
+####配置：
+
+* logstash.conf
+```
+    input {
+      beats {
+        port => 5044
+      }
+    }
+
+    output {
+      elasticsearch {
+        hosts => ["192.168.100.21:9200"]
+      }
+    }
+```
+* filebeat.conf
+```
+   filebeat:
+     prospectors:
+        paths:
+          - /home/deploy/rails/magnet/shared/log/staging.log
+        input_type: log
+     logstash:
+        hosts ["ip:port"]
+```
+
+#### 遇到的问题及解决
+
+1.  一直不能通过 sudo service kibana start 启动 kibana
+
+  `是因为我把 /opt/kibana 目录的 owner 设置成了 ubuntu, 其实它应该设置成 kibana:kibana`
+
+2. Kibana flapping between red and green, Kibana Memory 80+%
+
+   `vi /opt/kibana/bin/kibana`
+
+   `将最后一行换成： exec "${NODE}" "${NODE_OPTIONS:=--max-old-space-size=200}" "${DIR}/src/cli" ${@}`
